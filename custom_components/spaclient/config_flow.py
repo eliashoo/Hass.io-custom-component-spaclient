@@ -109,7 +109,7 @@ async def validate_input(hass, data):
         if entry.data[CONF_HOST] == data[CONF_HOST]:
             raise AlreadyConfigured
 
-    spa = spaclient(data[CONF_HOST], data[CONF_CHANNEL])
+    spa = spaclient(data[CONF_HOST], data.get(CONF_CHANNEL, None))
     connected = await spa.validate_connection()
     data[CONF_CHANNEL] = spa.channel_id[0]
     if not connected:

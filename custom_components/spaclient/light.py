@@ -1,10 +1,12 @@
 """Support for Spa Client lights."""
+
 # Import the device class from the component that you want to support
 from . import SpaClientDevice
 from .const import _LOGGER, DOMAIN, SPA
-from homeassistant.components.light import LightEntity
+from homeassistant.components.light import ColorMode, LightEntity
 
 from datetime import timedelta
+
 SCAN_INTERVAL = timedelta(seconds=1)
 
 
@@ -35,25 +37,35 @@ class SpaLight(SpaClientDevice, LightEntity):
     @property
     def unique_id(self) -> str:
         """Return a unique ID."""
-        return 'Light ' + str(self._light_num)
+        return "Light " + str(self._light_num)
 
     @property
     def name(self):
         """Return the name of the device."""
-        return 'Light ' + str(self._light_num)
+        return "Light " + str(self._light_num)
+
+    @property
+    def color_mode(self):
+        """Return the color mode of the light."""
+        return ColorMode.ONOFF
+
+    @property
+    def supported_color_modes(self):
+        """Return supported color modes."""
+        return [ColorMode.ONOFF]
 
     @property
     def is_on(self):
         """Return true if light is on."""
-        #_LOGGER.info("Update Light %s state", self._light_num)
+        # _LOGGER.info("Update Light %s state", self._light_num)
         return self._spaclient.get_light(self._light_num)
 
     async def async_turn_on(self, **kwargs):
         """Instruct the light to turn on."""
-        #_LOGGER.info("Turning On Light %s", self._light_num)
+        # _LOGGER.info("Turning On Light %s", self._light_num)
         self._spaclient.set_light(self._light_num, True)
 
     async def async_turn_off(self, **kwargs):
         """Instruct the light to turn off."""
-        #_LOGGER.info("Turning Off Light %s", self._light_num)
+        # _LOGGER.info("Turning Off Light %s", self._light_num)
         self._spaclient.set_light(self._light_num, False)

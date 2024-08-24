@@ -4,11 +4,9 @@ import socket
 from async_timeout import timeout
 
 import homeassistant.util.dt as dt_util
-from homeassistant.util.unit_conversion import TemperatureConverter
 
 # Import the device class from the component that you want to support
 from .const import _LOGGER
-from homeassistant.const import TEMP_CELSIUS, TEMP_FAHRENHEIT
 from threading import Lock
 from collections import deque
 
@@ -50,7 +48,7 @@ class spaclient:
         self.hour = 0
         self.minute = 0
         self.heat_mode = "Rest"
-        self.temp_scale = "Farenheit"
+        self.temp_scale = "Fahrenheit"
         self.filter_mode = False
         self.time_scale = "24 Hr"
         self.heating = False
@@ -114,6 +112,28 @@ class spaclient:
         self.high_range_max = 0
         self.nb_of_pumps = 0
         self.additional_information_loaded = False
+
+        """ Preferences variables """
+        self.pref_reminder = "Off"
+        self.pref_temp_scale = "Fahrenheit"
+        self.pref_clock_mode = "24 Hr"
+        self.pref_clean_up_cycle = 0
+        self.pref_dolphin_address = 0
+        self.pref_m8_ai = "Off"
+        self.preferences_loaded = False
+
+        """ Fault log variables """
+        self.fault_log_total_entries = 0
+        self.fault_log_entry_nb = 0
+        self.fault_log_msg_code = 0
+        self.fault_log_days_ago = 0
+        self.fault_log_msg_hour = 0
+        self.fault_log_msg_minute = 0
+        self.fault_log_todo = 0
+        self.fault_log_set_temp = 0
+        self.fault_log_sensor_a_temp = 0
+        self.fault_log_sensor_b_temp = 0
+        self.fault_log_loaded = False
 
     async def get_socket(self):
         if self.reader is None or self.writer is None or not self.is_connected:
@@ -398,14 +418,25 @@ class spaclient:
         01: Entry Number (0-23 (0=Entry #1))
         02: Message Code
         03: Days Ago (0-255?)
-        04: Time: Hour (0-24)
+        04: Time: Hour (0-23)
         05: Time: Minute (0-59)
         06: Flags TODO
         07: Set Temperature (Temperature scaled by Temperature Scale)
         08: Sensor A Temperature (Temperature scaled by Temperature Scale)
         09: Sensor B Temperature (Temperature scaled by Temperature Scale)
-
         """
+        self.fault_log_total_entries = byte_array[0]
+        self.fault_log_entry_nb = byte_array[1]
+        self.fault_log_msg_code = byte_array[2]
+        self.fault_log_days_ago = byte_array[3]
+        self.fault_log_msg_hour = byte_array[4]
+        self.fault_log_msg_minute = byte_array[5]
+        self.fault_log_todo = byte_array[6]
+        self.fault_log_set_temp = byte_array[7]
+        self.fault_log_sensor_a_temp = byte_array[8]
+        self.fault_log_sensor_b_temp = byte_array[9]
+
+        self.fault_log_loaded = True
 
         return True
 
@@ -481,6 +512,9 @@ class spaclient:
 
     def get_current_time(self):
         return "%d:%02d" % (self.hour, self.minute)
+
+    def get_fault_log_msg_code(self):
+        return self.fault_log_msg_code
 
     def get_heat_mode(self):
         return self.heat_mode
@@ -692,11 +726,6 @@ class spaclient:
             self.l.release()
             return True
 
-        if len(len_chunk) == 1:
-            _LOGGER.info("Invalid message %s", hex(len_chunk))
-            self.l.release()
-            return True
-
         length = len_chunk[1]
 
         if int(length) == 0:
@@ -716,6 +745,9 @@ class spaclient:
         self.l.release()
 
         if len(chunk) != length:
+            return True
+
+        if length < 2:
             return True
 
         data = chunk[:-2]
@@ -883,8 +915,6 @@ class spaclient:
 
     @retry()
     async def set_temperature(self, temp):
-        if self.temp_scale == "Celsius":
-            temp = round(TemperatureConverter.convert(temp, TEMP_FAHRENHEIT, TEMP_CELSIUS) * 2)
         self.send_message(self.channel_id + b"\xbf\x20", bytes([int(temp)]))
         while self.set_temp != temp:
             await asyncio.sleep(0.05)
@@ -910,6 +940,12 @@ class spaclient:
             await asyncio.sleep(0.05)
 
     @retry()
+    async def send_fault_log_request(self):
+        self.send_message(self.channel_id + b"\xbf\x22", b"\x20" + b"\x00" + b"\x00")
+        while self.fault_log_loaded == False:
+            await asyncio.sleep(0.05)
+
+    @retry()
     async def send_filter_cycles_request(self):
         self.send_message(self.channel_id + b"\xbf\x22", b"\x01" + b"\x00" + b"\x00")
         while self.filter_cycles_loaded == False:
@@ -930,23 +966,21 @@ class spaclient:
     def send_preferences_request(self):  # Not use yet!
         self.send_message(self.channel_id + b"\xbf\x22", b"\x08" + b"\x00" + b"\x00")
 
-    def send_fault_log_request(self):  # Not use yet!
-        self.send_message(self.channel_id + b"\xbf\x22", b"\x20" + b"\x00" + b"\x00")
-
     def send_gfci_test_request(self):  # Not use yet!
         self.send_message(self.channel_id + b"\xbf\x22", b"\x80" + b"\x00" + b"\x00")
 
-    def send_filter_cycle_config(self): #Not use yet!
+    def send_filter_cycle_config(self):  # Not use yet!
         self.send_message(
-            self.channel_id + b'\xbf\x23',
-            bytes([self.filter1_begins_hour]) +
-            bytes([self.filter1_begins_minute]) +
-            bytes([self.filter1_runs_hour]) +
-            bytes([self.filter1_runs_minute]) +
-            bytes([int(self.filter2_enabled << 7) + self.filter2_begins_hour]) +
-            bytes([self.filter2_begins_minute]) +
-            bytes([self.filter2_runs_hour]) +
-            bytes([self.filter2_runs_minute]))
+            self.channel_id + b"\xbf\x23",
+            bytes([self.filter1_begins_hour])
+            + bytes([self.filter1_begins_minute])
+            + bytes([self.filter1_runs_hour])
+            + bytes([self.filter1_runs_minute])
+            + bytes([int(self.filter2_enabled << 7) + self.filter2_begins_hour])
+            + bytes([self.filter2_begins_minute])
+            + bytes([self.filter2_runs_hour])
+            + bytes([self.filter2_runs_minute]),
+        )
 
     def set_temperature_scale(self, temperature_scale):  # Not use yet!
         self.send_message(self.channel_id + b"\xbf\x27", bytes([]) + bytes([]))

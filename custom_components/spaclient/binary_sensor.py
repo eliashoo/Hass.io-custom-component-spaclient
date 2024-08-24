@@ -2,7 +2,7 @@
 # Import the device class from the component that you want to support
 from . import SpaClientDevice
 from .const import _LOGGER, DOMAIN, ICONS, SPA
-from homeassistant.components.binary_sensor import BinarySensorEntity, DEVICE_CLASS_CONNECTIVITY
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 
 from datetime import timedelta
 SCAN_INTERVAL = timedelta(seconds=1)
@@ -116,7 +116,7 @@ class SpaGateway(SpaClientDevice, BinarySensorEntity):
         """Initialize the device."""
         super().__init__(spaclient, config_entry)
         self._spaclient = spaclient
-        self._sensor_type = DEVICE_CLASS_CONNECTIVITY
+        self._sensor_type = BinarySensorDeviceClass.CONNECTIVITY
 
     @property
     def unique_id(self) -> str:
